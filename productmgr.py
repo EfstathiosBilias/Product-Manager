@@ -134,9 +134,11 @@ def setup_gui():
     ttk.Button(frame, text="Remove Product", width=20, command=remove_product_dialog).grid(row=2, column=1, padx=10, pady=10)
     ttk.Button(frame, text="Refresh", width=20, command=refresh_products).grid(row=2, column=2, padx=10, pady=10)
 
-    # Listbox for product display
+    # Listbox for product display with event binding
     listbox = tk.Listbox(frame, width=80, height=15, font=("Helvetica", 12), selectmode=tk.SINGLE, bg="#ffffff", fg="#000000", bd=2)
     listbox.grid(row=3, column=0, columnspan=4, padx=10, pady=15)
+
+    listbox.bind("<Double-1>", on_item_select)  # Bind double-click event for editing a product
 
     # Bind the Enter key to the search function
     search_entry.bind("<Return>", lambda event: on_search(search_entry.get()))
@@ -153,7 +155,7 @@ def add_product_dialog():
         messagebox.showerror("Error", "Name is required!")
         return
 
-    price = simpledialog.askstring("Input", "Enter product price (optional):")
+    price = simpledialog.askstring("Input", "Enter product price:")
     try:
         price = float(price) if price else None
     except ValueError:
@@ -200,6 +202,52 @@ def cancel_search():
     search_entry.delete(0, tk.END)  # Clear the search input
     refresh_products()  # Reload all products
     clear_button.grid_forget()  # Hide the "X" button
+
+# Handle item double click to edit a product
+def on_item_select(event):
+    selected_index = listbox.curselection()
+    if selected_index:
+        selected_item = listbox.get(selected_index)
+        product_id = int(selected_item.split(",")[0].split(":")[1].strip())
+        
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('SELECT * FROM products WHERE id = ?', (product_id,))
+            product = cursor.fetchone()
+
+        if product:
+            edit_product_dialog(product)
+
+# Edit Product dialog
+def edit_product_dialog(product):
+    current_name, current_price, current_image_url = product[1], product[2], product[3]
+
+    new_name = simpledialog.askstring("Edit Product", "Enter new name:", initialvalue=current_name)
+    if new_name is None:
+        return
+
+    try:
+        new_price = simpledialog.askfloat("Edit Product", "Enter new price:", initialvalue=current_price)
+    except ValueError:
+        messagebox.showerror("Error", "Price must be a valid number!")
+        return
+
+    new_image_url = simpledialog.askstring("Edit Product", "Enter new image URL (optional):", initialvalue=current_image_url)
+    
+    update_product(product[0], new_name, new_price, new_image_url)
+
+# Update the product in the database
+def update_product(product_id, new_name, new_price, new_image_url):
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            UPDATE products
+            SET name = ?, price = ?, image_url = ?
+            WHERE id = ?
+        ''', (new_name, new_price, new_image_url, product_id))
+        conn.commit()
+
+    refresh_products()
 
 if __name__ == "__main__":
     initialize_db()
